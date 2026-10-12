@@ -51,9 +51,14 @@ cat >"$commands/omarchy-notification-send" <<'STUB'
 #!/bin/bash
 echo "notify: $*" >>"$TEST_LOG"
 STUB
+# Hyprland's own config watch is off unless a case turns it on.
 cat >"$commands/hyprctl" <<'STUB'
 #!/bin/bash
-printf '{"bool":true}\n'
+if [[ $3 == "misc:disable_autoreload" ]]; then
+  printf '{"bool":%s}\n' "${TEST_AUTORELOAD_OFF:-true}"
+else
+  printf '{"bool":true}\n'
+fi
 STUB
 # The new theme's intro stays on screen until the test lets it finish.
 cat >"$commands/omarchy-shell" <<'STUB'
@@ -118,6 +123,13 @@ grep -qx 'omarchy-restart-hyprctl' "$log" || fail "a switch without an intro rel
 touch "$test_tmp/release"
 wait_for_detached_work
 pass "a switch without an intro reloads Hyprland with the terminals"
+
+rm -f "$test_tmp/release"
+TEST_AUTORELOAD_OFF=false OMARCHY_THEME_SKIP_BACKGROUND=1 set_theme beta
+! grep -qx 'omarchy-restart-hyprctl' "$log" || fail "Hyprland watching its config is left to reload itself"
+touch "$test_tmp/release"
+wait_for_detached_work
+pass "Hyprland reloads only once when it watches its config"
 
 rm -f "$test_tmp/release"
 (sleep 0.3; touch "$test_tmp/release") &

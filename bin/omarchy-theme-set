@@ -67,6 +67,18 @@ report_failed_theme_commands() {
   fi
 }
 
+# Hyprland watches the config files it loaded, the theme's hyprland.lua among
+# them, and reloads itself when the swap replaces that. Reloading again repeats
+# the work, a compositor stall of ~20ms in the middle of the transition, so
+# reload here only when the watch is off: turned off by the user, or paused by
+# omarchy-hyprland-reload-guard around a package transaction.
+reload_hyprland_unless_watched() {
+  if [[ $(hyprctl -j getoption misc:disable_autoreload 2>/dev/null | jq -r '.bool' 2>/dev/null) == "false" ]]; then
+    return 0
+  fi
+  omarchy-restart-hyprctl
+}
+
 shell_ipc() {
   timeout 2 omarchy-shell "$@" >/dev/null 2>&1
 }
@@ -245,7 +257,7 @@ set_theme_background() {
       (
         flock 9
         if [[ $(stat -Lc '%d:%i' "$CURRENT_THEME_PATH" 2>/dev/null) == "$theme_id" ]]; then
-          omarchy-restart-hyprctl
+          reload_hyprland_unless_watched
         fi
       ) 9>"$THEME_SET_LOCK"
       [[ -z $OLD_BACKGROUND_SNAPSHOT ]] || rm -f "$OLD_BACKGROUND_SNAPSHOT"
@@ -559,7 +571,7 @@ if [[ $THEME_HEADLESS != "1" ]]; then
   # An intro reloads Hyprland after playback; ordinary theme changes reload it
   # with the terminals.
   if [[ -z $THEME_INTRO_TOKEN ]]; then
-    visible_theme_commands+=(omarchy-restart-hyprctl)
+    visible_theme_commands+=(reload_hyprland_unless_watched)
   fi
   run_parallel "${visible_theme_commands[@]}"
 
